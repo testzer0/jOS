@@ -6,10 +6,12 @@
 #include <inc/memlayout.h>
 #include <inc/assert.h>
 #include <inc/x86.h>
+#include <inc/textdefines.h>
 
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/pmap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -24,9 +26,137 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Display backtrace", mon_backtrace },
+	{ "showmappings", "Shows mappings for the addresses in the specified range", show_mappings},
+	{ "setperm", "Sets permissions for the specified phys/virt page", set_perms},
+	{ "dump", "Dumps memory from START to END", dump_memory},
 };
 
 /***** Implementations of basic kernel monitor commands *****/
+
+int 
+show_mappings(int argc, char **argv, struct Trapframe *tf)
+{
+	if (argc != 3) {
+		cprintf("Usage: showmappings 0xSTART 0xEND\n");
+		return 0;
+	}
+
+	uint32_t start_addr = (uint32_t) ROUNDDOWN(strtol(argv[1], NULL, 16), PGSIZE);
+	uint32_t end_addr = (uint32_t) ROUNDDOWN(strtol(argv[2], NULL, 16), PGSIZE);
+
+	if (start_addr >= end_addr) {
+		cprintf("Start >= End!\n");
+		return 0;
+	}
+
+	cprintf("START\tEND\tPTE_P\tPTE_W\tPTE_U\n");
+	while (start_addr < end_addr) {
+		pte_t *pte = pgdir_walk(kern_pgdir, (void *)start_addr, 0);
+		if (!pte) {
+			cprintf("0x%x\t0x%x\t0\t0\t0\n", start_addr, start_addr+PGSIZE);
+		}
+		else {
+			cprintf("0x%x\t0x%x\t%d\t\t%d\t\t%d\n", start_addr, start_addr+PGSIZE, (*pte & PTE_P)/PTE_P, (*pte & PTE_W)/PTE_W, (*pte & PTE_U)/PTE_U);
+		}
+		start_addr += PGSIZE;
+	}
+
+	return 0;
+}
+
+int 
+set_perms(int argc, char **argv, struct Trapframe *tf) 
+{
+	if (argc != 4) {
+		cprintf("Usage: setperm 0/1 [i.e. PHYS/VIRT] 0xaddr PERM\n");
+		cprintf("Addr will be rounded down to PGSIZE\n");
+		return 0;
+	}
+
+	unsigned int virt = strtol(argv[1], NULL, 0);
+	uint32_t addr = strtol(argv[2], NULL, 16);
+	uint32_t perm = strtol(argv[3], NULL, 0);
+	if (!virt) {
+		addr = ROUNDDOWN((uint32_t) KADDR((physaddr_t)addr), PGSIZE);
+	}
+
+	pte_t *pte = pgdir_walk(kern_pgdir, (void *)addr, 0);
+	if (!pte) {
+		cprintf("Not mapped yet\n");
+		return 0;
+	}
+
+	*pte = PTE_P | perm;
+
+	return 0;
+}
+
+int 
+dump_memory(int argc, char **argv, struct Trapframe *tf) 
+{
+	if (argc != 4) {
+		cprintf("Usage: dump [0|1] <PHYS/VIRT> 0xSTART 0xEND\n");
+		return 0;
+	}
+	unsigned int virt = strtol(argv[1], NULL, 0);
+	char *start = (char *)strtol(argv[2], NULL, 16);
+	char *end = (char *)strtol(argv[3], NULL, 16);
+	char *temp;
+
+	if (!virt) {
+		start = (char *)KADDR((physaddr_t)start);
+		end = (char *)KADDR((physaddr_t)end);
+	}
+
+	pte_t *pte = pgdir_walk(kern_pgdir, (void *)ROUNDDOWN(start, PGSIZE), 0);
+	if (!pte) {
+		temp = ROUNDUP(start+1, PGSIZE), end;
+		if (temp > end) {
+			temp = end;
+		}
+		while (start < temp) {
+			if ((unsigned int)(start) % 0x20 == 0) {
+				cprintf("\n0x%x : ", start);
+			}
+			cprintf("0x%x ", 0);
+			start += 0x8;
+		}
+	}
+
+	while (start < end) {
+		pte_t *pte = pgdir_walk(kern_pgdir, (void *)start, 0);
+		if (pte) {
+			temp = ROUNDUP(start+1, PGSIZE), end;
+			if (temp > end) {
+				temp = end;
+			}
+			while (start < temp) {
+				if ((unsigned int)(start) % 0x20 == 0) {
+					cprintf("\n0x%x : ", start);
+				}
+				cprintf("0x%x ", *start);
+				start += 0x8;
+			}
+		} 
+		else {
+			temp = ROUNDUP(start+1, PGSIZE), end;
+			if (temp > end) {
+				temp = end;
+			}
+			while (start < temp) {
+				if ((unsigned int)(start) % 0x20 == 0) {
+					cprintf("\n0x%x : ", start);
+				}
+				cprintf("0x%x ", 0);
+				start += 0x8;
+			}
+		}
+	}
+
+	cprintf("\n");
+	return 0;
+}
 
 int
 mon_help(int argc, char **argv, struct Trapframe *tf)
@@ -57,7 +187,20 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
-	// Your code here.
+	cprintf("Stack backtrace:\n");
+
+	unsigned int *ebp = (unsigned int *)read_ebp();
+
+	while(ebp) {
+		cprintf("ebp %08x eip %08x args %08x %08x %08x %08x %08x\n", ebp, ebp[1], ebp[2], ebp[3], ebp[4], ebp[5], ebp[6]);
+
+		struct Eipdebuginfo einfo;
+		debuginfo_eip(ebp[1], &einfo);
+
+		cprintf("\t%s:%d: %.*s+%d\n", einfo.eip_file, einfo.eip_line,einfo.eip_fn_namelen, einfo.eip_fn_name, ebp[1] - einfo.eip_fn_addr);
+		ebp = (unsigned int *)*ebp;
+	}
+
 	return 0;
 }
 
