@@ -11,11 +11,8 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
-<<<<<<< HEAD
 #include <kern/trap.h>
-=======
 #include <kern/pmap.h>
->>>>>>> lab2
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -34,6 +31,8 @@ static struct Command commands[] = {
 	{ "showmappings", "Shows mappings for the addresses in the specified range", show_mappings},
 	{ "setperm", "Sets permissions for the specified phys/virt page", set_perms},
 	{ "dump", "Dumps memory from START to END", dump_memory},
+	{ "quit", "Quits kernel monitor [single steps if flag set]", quit},
+	{ "setstep", "Sets single step to true or false", setstep},
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -159,6 +158,31 @@ dump_memory(int argc, char **argv, struct Trapframe *tf)
 	}
 
 	cprintf("\n");
+	return 0;
+}
+
+int quit(int argc, char **argv, struct Trapframe *tf)
+{
+	return -1; // causes monitor() to return
+}
+
+int setstep(int argc, char **argv, struct Trapframe *tf)
+{
+	if (argc != 2) {
+		cprintf("Usage: setstep [0|1] <step ON|step OFF>\n");
+		return 0;
+	}
+	int opt = (int)strtol(argv[1], NULL, 0);
+	if (opt) {
+		uint32_t flags = read_eflags();
+		flags |= (1 << 8); 			// set trap flag on
+		write_eflags(flags);
+	}
+	else {
+		uint32_t flags = read_eflags();
+		flags &= ~(1 << 8); 		// clear trap flag
+		write_eflags(flags);
+	}
 	return 0;
 }
 
