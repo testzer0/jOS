@@ -43,6 +43,7 @@ enum EnvType {
 	ENV_TYPE_USER = 0,
 };
 
+
 struct Env {
 	struct Trapframe env_tf;	// Saved registers
 	struct Env *env_link;		// Next free Env
