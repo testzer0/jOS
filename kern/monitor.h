@@ -15,5 +15,10 @@ void monitor(struct Trapframe *tf);
 int mon_help(int argc, char **argv, struct Trapframe *tf);
 int mon_kerninfo(int argc, char **argv, struct Trapframe *tf);
 int mon_backtrace(int argc, char **argv, struct Trapframe *tf);
+int show_mappings(int argc, char **argv, struct Trapframe *tf);
+int set_perms(int argc, char **argv, struct Trapframe *tf);
+int dump_memory(int argc, char **argv, struct Trapframe *tf);
+int quit(int argc, char **argv, struct Trapframe *tf);
+int setstep(int argc, char **argv, struct Trapframe *tf);
 
 #endif	// !JOS_KERN_MONITOR_H

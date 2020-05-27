@@ -7,6 +7,7 @@
 #include <inc/string.h>
 #include <inc/stdarg.h>
 #include <inc/error.h>
+#include <inc/textdefines.h>
 
 /*
  * Space or zero padding and a field width are supported for the numeric
@@ -99,8 +100,10 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 
 	while (1) {
 		while ((ch = *(unsigned char *) fmt++) != '%') {
-			if (ch == '\0')
+			if (ch == '\0') {
+				text_color = 0x0700;
 				return;
+			}
 			putch(ch, putdat);
 		}
 
@@ -159,6 +162,11 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 				width = precision, precision = -1;
 			goto reswitch;
 
+		case 'm':
+			num = getint(&ap, lflag);
+			text_color = num;
+			break;
+
 		// long flag (doubled for long long)
 		case 'l':
 			lflag++;
@@ -214,11 +222,9 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 
 		// (unsigned) octal
 		case 'o':
-			// Replace this with your code.
-			putch('X', putdat);
-			putch('X', putdat);
-			putch('X', putdat);
-			break;
+			num = getuint(&ap, lflag);
+			base = 8;
+			goto number;
 
 		// pointer
 		case 'p':
