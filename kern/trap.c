@@ -263,6 +263,12 @@ trap_dispatch(struct Trapframe *tf)
 			lapic_eoi();
 			sched_yield();
 			return;
+		case IRQ_OFFSET + IRQ_KBD:
+			kbd_intr();
+			return;
+		case IRQ_OFFSET + IRQ_SERIAL:
+			serial_intr();
+			return;
 		default:
 			break;
 	}
@@ -312,7 +318,7 @@ trap(struct Trapframe *tf)
 	// Check that interrupts are disabled.  If this assertion
 	// fails, DO NOT be tempted to fix it by inserting a "cli" in
 	// the interrupt path.
-	assert(!(read_eflags() & FL_IF));
+	// assert(!(read_eflags() & FL_IF));
 
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
