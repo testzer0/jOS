@@ -113,4 +113,5 @@ spin_unlock(struct spinlock *lk)
 	// (vol 3, 8.2.2). Because xchg() is implemented using asm volatile,
 	// gcc will not reorder C statements across the xchg.
 	xchg(&lk->locked, 0);
+
 }
