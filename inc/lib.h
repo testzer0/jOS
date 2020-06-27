@@ -64,6 +64,9 @@ unsigned int sys_time_msec(void);
 int	sys_ipc_send(envid_t to_env, uint32_t value, void *pg, int perm);
 int	sys_ipc_recv_from_queue(void *rcv_pg);
 
+int     sys_transmit_packet(char *buf, int size);
+int     sys_receive_packet(char *buf, int size);
+
 // This must be inlined.  Exercise for reader: why?
 static inline envid_t __attribute__((always_inline))
 sys_exofork(void)

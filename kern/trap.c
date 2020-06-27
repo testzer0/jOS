@@ -260,10 +260,6 @@ trap_dispatch(struct Trapframe *tf)
 		case T_SYSCALL:
 			tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
 			return;
-		case IRQ_OFFSET + IRQ_TIMER:
-			lapic_eoi();
-			sched_yield();
-			return;
 		case IRQ_OFFSET + IRQ_KBD:
 			kbd_intr();
 			return;
@@ -291,7 +287,13 @@ trap_dispatch(struct Trapframe *tf)
 	// Be careful! In multiprocessors, clock interrupts are
 	// triggered on every CPU.
 	// LAB 6: Your code here.
-
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		lapic_eoi();
+		if (cpunum() == 0)
+			time_tick();
+		sched_yield();
+		return;
+	}
 
 	// Handle keyboard and serial interrupts.
 	// LAB 5: Your code here.
