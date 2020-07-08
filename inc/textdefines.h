@@ -1,0 +1,1 @@
+int text_color;
